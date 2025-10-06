@@ -315,7 +315,11 @@ print(gcf, 'inverse_problem_validation.png', '-dpng', '-r300');
 fprintf('\n=== FINAL SUMMARY ===\n');
 fprintf('Inverse problem type: Load allocation from partial measurements\n');
 fprintf('Method: Constrained nonlinear optimization\n');
-fprintf('Success: %s\n', exitflag > 0 ? 'YES' : 'NO');
+if exitflag > 0
+    fprintf('Success: YES\n');
+else
+    fprintf('Success: NO\n');
+end
 fprintf('Load estimation RMSE: %.2f MW (%.1f%% of average load)\n', ...
         load_rmse, (load_rmse/mean(true_load_values))*100);
 fprintf('Flow prediction RMSE: %.2f MW\n', flow_rmse);
@@ -325,8 +329,6 @@ fprintf('Total load recovery accuracy: %.2f%%\n', ...
 fprintf('\nFiles saved:\n');
 fprintf('- inverse_problem_validation_results.mat\n');
 fprintf('- inverse_problem_validation.png\n');
-
-end
 
 %% Objective Function for Inverse Problem
 function obj_val = inverse_objective_function(loads, load_buses, mpc_base, ...
