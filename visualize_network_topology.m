@@ -34,31 +34,65 @@ for i = 1:n_branches
     end
 end
 
-% Create graph object for automatic layout
-G = graph(adj_matrix);
-
-%% Generate Node Positions
-% Use force-directed layout for better visualization
+%% Generate Node Positions using Simple Algorithm
+% Create basic layout since advanced graph layout may not be available
 fprintf('Generating network layout...\n');
 
-% Try different layout algorithms
-layout_method = 'force';  % Options: 'force', 'circle', 'layered'
+% Use a simple force-directed algorithm or circular layout
+use_circular = true; % Set to false for simple force-directed
 
-switch layout_method
-    case 'force'
-        % Force-directed layout (good for general networks)
-        [x_pos, y_pos] = layout(G, 'force', 'UseGravity', true);
-    case 'circle'
-        % Circular layout
-        [x_pos, y_pos] = layout(G, 'circle');
-    case 'layered'
-        % Layered layout (good for hierarchical networks)
-        [x_pos, y_pos] = layout(G, 'layered');
+if use_circular
+    % Circular layout
+    angles = linspace(0, 2*pi, n_buses+1);
+    angles = angles(1:end-1); % Remove duplicate point
+    radius = 5;
+    x_pos = radius * cos(angles)';
+    y_pos = radius * sin(angles)';
+else
+    % Simple spring-based layout
+    x_pos = randn(n_buses, 1) * 3;
+    y_pos = randn(n_buses, 1) * 3;
+    
+    % Simple force-directed iterations
+    for iter = 1:50
+        fx = zeros(n_buses, 1);
+        fy = zeros(n_buses, 1);
+        
+        % Repulsive forces between all nodes
+        for i = 1:n_buses
+            for j = i+1:n_buses
+                dx = x_pos(i) - x_pos(j);
+                dy = y_pos(i) - y_pos(j);
+                dist = sqrt(dx^2 + dy^2) + 0.1;
+                force = 0.5 / dist^2;
+                fx(i) = fx(i) + force * dx / dist;
+                fy(i) = fy(i) + force * dy / dist;
+                fx(j) = fx(j) - force * dx / dist;
+                fy(j) = fy(j) - force * dy / dist;
+            end
+        end
+        
+        % Attractive forces for connected nodes
+        for i = 1:n_branches
+            from_idx = find(buses == from_buses(i));
+            to_idx = find(buses == to_buses(i));
+            if ~isempty(from_idx) && ~isempty(to_idx)
+                dx = x_pos(to_idx) - x_pos(from_idx);
+                dy = y_pos(to_idx) - y_pos(from_idx);
+                dist = sqrt(dx^2 + dy^2) + 0.1;
+                force = 0.01 * dist;
+                fx(from_idx) = fx(from_idx) + force * dx / dist;
+                fy(from_idx) = fy(from_idx) + force * dy / dist;
+                fx(to_idx) = fx(to_idx) - force * dx / dist;
+                fy(to_idx) = fy(to_idx) - force * dy / dist;
+            end
+        end
+        
+        % Update positions
+        x_pos = x_pos + 0.1 * fx;
+        y_pos = y_pos + 0.1 * fy;
+    end
 end
-
-% Scale and adjust positions for better visualization
-x_pos = x_pos * 10;  % Scale up
-y_pos = y_pos * 10;
 
 %% Classify Buses by Function
 load_buses = find(mpc.bus(:, 3) > 0);           % Buses with load

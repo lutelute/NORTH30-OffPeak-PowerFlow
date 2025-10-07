@@ -74,15 +74,15 @@ fprintf('- Initial guess: %.1f MW per bus\n', target_total_load / n_load_buses);
 objective_function = @(loads) flow_matching_objective(loads, load_buses, mpc_unknown, ...
                                                      target_flows, target_from, target_to);
 
-% Constraints
-lb = zeros(n_load_buses, 1);           % Non-negative loads
-ub = 300 * ones(n_load_buses, 1);     % Reasonable upper bound
+% Constraints (Allow distributed generation)
+lb = -150 * ones(n_load_buses, 1);    % Allow negative loads (distributed generation)
+ub = 350 * ones(n_load_buses, 1);     % Upper bound for loads
 
 % Power balance constraint: total load = generation - losses
 Aeq = ones(1, n_load_buses);
 beq = target_total_load;
 
-fprintf('- Load bounds: 0 to 300 MW per bus\n');
+fprintf('- Load bounds: %.0f to %.0f MW per bus (negative = distributed generation)\n', lb(1), ub(1));
 fprintf('- Power balance constraint: Σ loads = %.1f MW\n', target_total_load);
 
 %% STEP 5: Solve Optimization Problem
