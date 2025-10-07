@@ -46,9 +46,10 @@ subject to: g(x) = 0  (電力バランス制約)
 |------------|------|----------|
 | `north30_matpower.m` | MATPOWERケースファイル | 基本データ |
 | `run_dc_powerflow.m` | DC潮流計算 | 順問題 |
-| `load_allocation_demo.m` | 負荷配分逆問題デモ（推奨） | **逆問題** |
-| `realistic_load_allocation.m` | 現実的な逆問題求解 | **逆問題** |
+| `realistic_load_allocation.m` | 現実的な逆問題求解（推奨） | **逆問題** |
+| `linear_algebra_load_allocation.m` | 線形代数直接解法（最適化不要） | **逆問題** |
 | `visualize_network_topology.m` | 系統接続状態の2D可視化 | 可視化 |
+| `network_graph_python.py` | Python NetworkX可視化 | 可視化 |
 
 ### データファイル
 
@@ -65,11 +66,11 @@ subject to: g(x) = 0  (電力バランス制約)
 ### 1. 逆問題による負荷配分（推奨）
 
 ```matlab
-% 負荷配分逆問題デモ（メイン）
-load_allocation_demo
-
-% 現実的な逆問題設定
+% 現実的な逆問題設定（推奨）
 realistic_load_allocation
+
+% 線形代数による直接解法（最適化不要）
+linear_algebra_load_allocation
 ```
 
 ### 2. 基本的な潮流計算（順問題）
@@ -82,17 +83,22 @@ run_dc_powerflow
 ### 3. 系統可視化
 
 ```matlab
-% 系統接続状態の2D表示
+% 系統接続状態の2D表示（MATLAB）
 visualize_network_topology
+```
+
+```python
+# Python NetworkX による詳細可視化
+python network_graph_python.py
 ```
 
 ## シミュレーション結果
 
-### 1. 負荷配分逆問題デモンストレーション
+### 1. 現実的な負荷配分逆問題（推奨）
 
-`load_allocation_demo` の実行結果：
+`realistic_load_allocation` の実行結果：
 
-![Load Allocation Inverse Problem](load_allocation_inverse_problem.png)
+![Realistic Load Allocation Results](realistic_load_allocation.png)
 
 **真の逆問題による負荷配分（改良版）：**
 - **左上**: 真値 vs 推定値の負荷配分比較
@@ -132,16 +138,47 @@ visualize_network_topology
 - **左下**: 潮流誤差のヒストグラム
 - **右下**: 最適化サマリー
 
-### 2. 現実的な逆問題設定
-
-`realistic_load_allocation` を実行すると：
+**特徴：**
 - ブランチ潮流のみを観測データとして使用
-- 現実的な制約下での負荷配分最適化
-- 6つのサブプロットによる包括的分析
+- 分散電源対応：-150 ≤ 負荷 ≤ 350 MW（負値=発電）
+- 制約付き最適化による現実的な負荷配分
 
-結果は実行時に `realistic_load_allocation.png` として保存されます。
+### 2. 線形代数による直接解法
 
-### 3. 系統接続状態の可視化
+`linear_algebra_load_allocation` による結果：
+
+**特徴：**
+- **最適化不要**: 純粋な行列演算のみ
+- **高速計算**: O(n³)の計算量
+- **決定論的**: 常に同じ解が得られる
+- **理論的根拠**: P = H × L の線形関係を利用
+
+**システム分類：**
+- 過決定系 (m > n): 最小二乗解
+- 劣決定系 (m < n): 最小ノルム解
+- 丁度決定系 (m = n): 直接解
+
+### 3. Python NetworkX可視化
+
+`network_graph_python.py` の実行結果：
+
+![Python Network Visualization](north30_network_python.png)
+
+**4分割表示：**
+- **左上**: 基本ネットワーク構成（バス種別・潮流強度）
+- **右上**: 電力フロー強調表示
+- **左下**: 電圧レベル別バス分類
+- **右下**: ネットワーク統計情報
+
+**中心性解析：**
+
+![Network Centrality Analysis](north30_centrality_analysis.png)
+
+- ノードサイズ：媒介中心性に比例
+- ノード色：次数中心性に対応
+- 重要バスの特定と系統の脆弱性分析
+
+### 4. MATLAB系統可視化
 
 `visualize_network_topology` の実行結果：
 
