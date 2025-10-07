@@ -290,21 +290,24 @@ xline(mean_error - std_error, 'g--', 'LineWidth', 1);
 % Subplot 8: Summary statistics
 subplot(2,4,8);
 axis off;
+
+% Calculate success rate outside the cell array
+good_estimates = sum(abs(load_errors_plot./true_loads_only) < 0.25);
+
 summary_stats = {
     'LOAD ALLOCATION SUMMARY';
     '======================';
     sprintf('Load RMSE: %.1f MW', allocation_rmse);
     sprintf('Load MAE: %.1f MW', allocation_mae);
-    sprintf('Load Correlation: R² = %.3f', load_corr^2);
+    sprintf('Load Correlation: R^2 = %.3f', load_corr^2);
     '';
     sprintf('Flow RMSE: %.1f MW', flow_rmse);
     sprintf('Total Load Recovery:');
     sprintf('  True: %.0f MW', sum(true_loads_only));
     sprintf('  Est:  %.0f MW', sum(estimated_loads));
-    sprintf('  Error: %.1f%% ', total_error/sum(true_loads_only)*100);
+    sprintf('  Error: %.1f%%', total_error/sum(true_loads_only)*100);
     '';
     sprintf('Success Rate:');
-    good_estimates = sum(abs(load_errors_plot./true_loads_only) < 0.25);
     sprintf('  Good estimates: %d/%d', good_estimates, length(true_loads_only));
 };
 

@@ -45,12 +45,9 @@ subject to: g(x) = 0  (電力バランス制約)
 | ファイル名 | 機能 | 問題種別 |
 |------------|------|----------|
 | `north30_matpower.m` | MATPOWERケースファイル | 基本データ |
-| `run_powerflow.m` | AC潮流計算 | 順問題 |
 | `run_dc_powerflow.m` | DC潮流計算 | 順問題 |
-| `compare_results.m` | CSVデータとの比較 | 検証 |
-| `solve_load_allocation_inverse.m` | 基本的な逆問題求解 | **逆問題** |
-| `inverse_problem_validation.m` | 完全な逆問題検証 | **逆問題** |
-| `visualize_comparison.m` | 結果可視化 | 分析 |
+| `load_allocation_demo.m` | 負荷配分逆問題デモ | **逆問題** |
+| `realistic_load_allocation.m` | 現実的な逆問題求解 | **逆問題** |
 
 ### データファイル
 
@@ -64,40 +61,21 @@ subject to: g(x) = 0  (電力バランス制約)
 
 ## 使用方法
 
-### 1. 基本的な潮流計算（順問題）
+### 1. 逆問題による負荷配分（推奨）
+
+```matlab
+% 負荷配分逆問題デモ（メイン）
+load_allocation_demo
+
+% 現実的な逆問題設定
+realistic_load_allocation
+```
+
+### 2. 基本的な潮流計算（順問題）
 
 ```matlab
 % DC潮流計算
 run_dc_powerflow
-
-% AC潮流計算
-run_powerflow
-
-% 結果比較
-compare_results
-```
-
-### 2. 逆問題による負荷推定
-
-```matlab
-% 負荷配分逆問題デモ（推奨）
-load_allocation_demo
-
-% 現実的な逆問題
-realistic_load_allocation
-
-% 完全な逆問題検証
-inverse_problem_validation
-
-% 基本的な逆問題求解
-solve_load_allocation_inverse
-```
-
-### 3. 結果可視化
-
-```matlab
-% ブランチ潮流比較
-visualize_comparison
 ```
 
 ## シミュレーション結果
@@ -141,33 +119,15 @@ visualize_comparison
 - **左下**: 潮流誤差のヒストグラム
 - **右下**: 最適化サマリー
 
-### 2. 完全な逆問題検証
+### 2. 現実的な逆問題設定
 
-`inverse_problem_validation` の実行結果：
+`realistic_load_allocation` を実行すると：
+- ブランチ潮流のみを観測データとして使用
+- 現実的な制約下での負荷配分最適化
+- 6つのサブプロットによる包括的分析
 
-![Inverse Problem Validation](inverse_problem_validation.png)
+結果は実行時に `realistic_load_allocation.png` として保存されます。
 
-**特徴：**
-- 電圧・潮流データの両方を使用
-- より詳細な検証分析
-- 統計的精度評価
-
-### 3. ブランチ潮流比較
-
-`visualize_comparison` の実行結果：
-
-![Branch Flow Comparison](branch_flow_comparison.png)
-
-**分析内容：**
-- CSVデータ vs DC計算結果
-- RMSE、MAE、相関係数
-- 誤差分布の統計解析
-
-![Error Distribution](error_distribution.png)
-
-**誤差解析：**
-- 誤差の正規分布確認
-- Q-Qプロットによる統計的妥当性
 
 ## 逆問題の実装詳細
 
@@ -235,16 +195,6 @@ lb ≤ x ≤ ub   % 負荷の物理的上下限（不等式制約）
 - **負荷相関係数**: R² > 0.85
 - **総負荷回復精度**: > 98%
 
-#### 完全な逆問題検証（inverse_problem_validation）
-- **負荷推定精度**: RMSE ≈ 10-20 MW
-- **潮流予測精度**: RMSE ≈ 5-15 MW  
-- **相関係数**: R² > 0.9
-- **総負荷回復精度**: > 95%
-
-#### ブランチ潮流比較（visualize_comparison）
-- **DC vs CSV比較**: RMSE ≈ 2-10 MW
-- **相関係数**: R² > 0.95
-- **相対誤差**: < 5%
 
 ## 理論的背景
 
