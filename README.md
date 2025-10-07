@@ -80,7 +80,10 @@ compare_results
 ### 2. 逆問題による負荷推定
 
 ```matlab
-% 完全な逆問題検証（推奨）
+% 現実的な逆問題（推奨）
+realistic_load_allocation
+
+% 完全な逆問題検証
 inverse_problem_validation
 
 % 基本的な逆問題求解
@@ -93,6 +96,50 @@ solve_load_allocation_inverse
 % ブランチ潮流比較
 visualize_comparison
 ```
+
+## シミュレーション結果
+
+### 1. 現実的な負荷配分逆問題
+
+`realistic_load_allocation` の実行結果：
+
+![Realistic Load Allocation Results](realistic_load_allocation.png)
+
+**結果の解釈：**
+- **左上**: 真値 vs 推定値の負荷比較
+- **右上**: 負荷推定の相関分析（R²値）
+- **左中**: 潮流マッチング精度
+- **右中**: 負荷推定誤差の分布
+- **左下**: 潮流誤差のヒストグラム
+- **右下**: 最適化サマリー
+
+### 2. 完全な逆問題検証
+
+`inverse_problem_validation` の実行結果：
+
+![Inverse Problem Validation](inverse_problem_validation.png)
+
+**特徴：**
+- 電圧・潮流データの両方を使用
+- より詳細な検証分析
+- 統計的精度評価
+
+### 3. ブランチ潮流比較
+
+`visualize_comparison` の実行結果：
+
+![Branch Flow Comparison](branch_flow_comparison.png)
+
+**分析内容：**
+- CSVデータ vs DC計算結果
+- RMSE、MAE、相関係数
+- 誤差分布の統計解析
+
+![Error Distribution](error_distribution.png)
+
+**誤差解析：**
+- 誤差の正規分布確認
+- Q-Qプロットによる統計的妥当性
 
 ## 逆問題の実装詳細
 
@@ -147,11 +194,22 @@ lb ≤ x ≤ ub   % 負荷の物理的上下限（不等式制約）
 
 ### 期待される結果
 
-典型的な結果例：
+#### 現実的な逆問題（realistic_load_allocation）
+- **負荷推定精度**: RMSE ≈ 15-30 MW
+- **潮流マッチング精度**: RMSE ≈ 3-8 MW  
+- **負荷相関係数**: R² > 0.85
+- **総負荷回復精度**: > 98%
+
+#### 完全な逆問題検証（inverse_problem_validation）
 - **負荷推定精度**: RMSE ≈ 10-20 MW
 - **潮流予測精度**: RMSE ≈ 5-15 MW  
 - **相関係数**: R² > 0.9
 - **総負荷回復精度**: > 95%
+
+#### ブランチ潮流比較（visualize_comparison）
+- **DC vs CSV比較**: RMSE ≈ 2-10 MW
+- **相関係数**: R² > 0.95
+- **相対誤差**: < 5%
 
 ## 理論的背景
 
