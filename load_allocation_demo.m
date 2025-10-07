@@ -75,11 +75,13 @@ fprintf('\nSOLVING LOAD ALLOCATION...\n');
 objective = @(loads) load_allocation_objective(loads, load_buses, mpc_unknown, ...
                                               observed_flows, observed_from, observed_to);
 
-% Constraints
-lb = zeros(n_vars, 1);           % Non-negative loads
-ub = 400 * ones(n_vars, 1);     % Reasonable upper bounds
+% Constraints (Allow negative loads for distributed generation)
+lb = -200 * ones(n_vars, 1);    % Allow negative loads (distributed generation)
+ub = 400 * ones(n_vars, 1);     % Upper bounds for loads
 Aeq = ones(1, n_vars);           % Total load constraint
 beq = target_total;
+
+fprintf('- Constraint: %.1f ≤ Load ≤ %.1f MW (negative = generation)\n', lb(1), ub(1));
 
 % Solve optimization
 options = optimoptions('fmincon', 'Display', 'iter', 'MaxIterations', 300);
@@ -152,40 +154,71 @@ fprintf('MAE:  %.2f MW\n', allocation_mae);
 fprintf('Total load error: %.2f MW (%.2f%%)\n', ...
         total_error, (total_error/sum(true_loads_only))*100);
 
-%% STEP 7: Flow Matching Verification
-fprintf('\n=== FLOW MATCHING VERIFICATION ===\n');
-fprintf('Line   | Observed | Calculated | Error   | Error%%\n');
-fprintf('-------|----------|------------|---------|--------\n');
+%% STEP 7: Comprehensive Flow Analysis
+fprintf('\n=== COMPREHENSIVE FLOW ANALYSIS ===\n');
 
+% Display all significant branch flows (not just observed ones)
+fprintf('All Significant Branch Flows (> 10 MW):\n');
+fprintf('From To | True Flow | Calc Flow | Error   | Error%% | Used in Opt\n');
+fprintf('--------|-----------|-----------|---------|--------|------------\n');
+
+all_flow_errors = [];
 flow_match_errors = [];
-for i = 1:length(observed_flows)
-    from_bus = observed_from(i);
-    to_bus = observed_to(i);
-    observed_flow = observed_flows(i);
+used_flows = [];
+true_flows_all = [];
+calc_flows_all = [];
+
+for i = 1:size(results_true.branch, 1)
+    from_bus = results_true.branch(i, 1);
+    to_bus = results_true.branch(i, 2);
+    true_flow = results_true.branch(i, 14);
     
     % Find calculated flow
     calc_idx = find(results_estimated.branch(:,1) == from_bus & ...
                    results_estimated.branch(:,2) == to_bus);
     
-    if ~isempty(calc_idx)
+    if ~isempty(calc_idx) && abs(true_flow) > 10
         calculated_flow = results_estimated.branch(calc_idx(1), 14);
-        error = calculated_flow - observed_flow;
+        error = calculated_flow - true_flow;
         
-        if abs(observed_flow) > 0.1
-            error_pct = (error / observed_flow) * 100;
+        if abs(true_flow) > 0.1
+            error_pct = (error / true_flow) * 100;
         else
             error_pct = 0;
         end
         
-        flow_match_errors = [flow_match_errors; abs(error)];
+        % Check if this flow was used in optimization
+        used_in_opt = any(observed_from == from_bus & observed_to == to_bus);
+        if used_in_opt
+            used_marker = 'YES';
+        else
+            used_marker = 'NO';
+        end
         
-        fprintf('%2d→%-2d  | %8.1f | %10.1f | %7.1f | %6.1f%%\n', ...
-                from_bus, to_bus, observed_flow, calculated_flow, error, error_pct);
+        all_flow_errors = [all_flow_errors; abs(error)];
+        true_flows_all = [true_flows_all; true_flow];
+        calc_flows_all = [calc_flows_all; calculated_flow];
+        
+        if used_in_opt
+            flow_match_errors = [flow_match_errors; abs(error)];
+            used_flows = [used_flows; true_flow];
+        end
+        
+        fprintf(' %2d %2d | %9.1f | %9.1f | %7.1f | %6.1f%% | %s\n', ...
+                from_bus, to_bus, true_flow, calculated_flow, error, error_pct, used_marker);
     end
 end
 
-flow_rmse = sqrt(mean(flow_match_errors.^2));
-fprintf('\nFlow Matching RMSE: %.2f MW\n', flow_rmse);
+% Flow analysis statistics
+all_flow_rmse = sqrt(mean(all_flow_errors.^2));
+observed_flow_rmse = sqrt(mean(flow_match_errors.^2));
+flow_correlation = corr(true_flows_all, calc_flows_all);
+
+fprintf('\n=== FLOW ANALYSIS SUMMARY ===\n');
+fprintf('All significant flows RMSE: %.2f MW\n', all_flow_rmse);
+fprintf('Observed flows RMSE: %.2f MW\n', observed_flow_rmse);
+fprintf('Flow correlation: R² = %.3f\n', flow_correlation^2);
+fprintf('Flows used in optimization: %d/%d\n', length(used_flows), length(true_flows_all));
 
 %% STEP 8: Comprehensive Visualization
 figure('Position', [50, 50, 1600, 1000]);
@@ -217,8 +250,28 @@ load_corr = corr(true_loads_only, estimated_loads);
 text(0.05, 0.95, sprintf('R² = %.3f', load_corr^2), 'Units', 'normalized', ...
      'BackgroundColor', 'white', 'FontSize', 12);
 
-% Subplot 3: Load allocation errors
+% Subplot 3: All branch flows comparison
 subplot(2,4,3);
+if ~isempty(true_flows_all) && ~isempty(calc_flows_all)
+    scatter(true_flows_all, calc_flows_all, 60, 'filled', 'MarkerFaceAlpha', 0.7);
+    hold on;
+    min_flow = min([true_flows_all; calc_flows_all]);
+    max_flow = max([true_flows_all; calc_flows_all]);
+    plot([min_flow, max_flow], [min_flow, max_flow], 'r--', 'LineWidth', 2);
+    xlabel('True Flow (MW)');
+    ylabel('Calculated Flow (MW)');
+    title('All Branch Flows Correlation');
+    grid on;
+    axis equal;
+    
+    % Add correlation info
+    text(0.05, 0.95, sprintf('R² = %.3f', flow_correlation^2), 'Units', 'normalized', ...
+         'BackgroundColor', 'white', 'FontSize', 10);
+    hold off;
+end
+
+% Subplot 4: Load allocation errors
+subplot(2,4,4);
 load_errors_plot = estimated_loads - true_loads_only;
 bar(load_errors_plot, 'FaceColor', [0.8 0.4 0.4]);
 xlabel('Load Bus Index');
@@ -227,49 +280,41 @@ title('Load Allocation Errors');
 grid on;
 yline(0, 'k--', 'LineWidth', 1);
 
-% Subplot 4: Flow matching accuracy
-subplot(2,4,4);
-if ~isempty(flow_match_errors)
-    bar(flow_match_errors, 'FaceColor', [0.4 0.6 0.8]);
-    xlabel('Measurement Index');
-    ylabel('Flow Error (MW)');
-    title('Flow Matching Errors');
-    grid on;
-end
-
-% Subplot 5: Load distribution pie chart (True)
+% Subplot 5: Observed vs All Flow Errors
 subplot(2,4,5);
-if length(true_loads_only) <= 8
-    pie(true_loads_only, cellstr(num2str(load_buses)));
-    title('True Load Distribution');
-else
-    % Group smaller loads
-    [sorted_loads, sort_idx] = sort(true_loads_only, 'descend');
-    top_loads = sorted_loads(1:min(6, length(sorted_loads)));
-    top_buses = load_buses(sort_idx(1:length(top_loads)));
-    other_load = sum(sorted_loads(length(top_loads)+1:end));
+if ~isempty(flow_match_errors) && ~isempty(all_flow_errors)
+    x_pos = [1, 2];
+    avg_errors = [mean(flow_match_errors), mean(all_flow_errors)];
+    std_errors = [std(flow_match_errors), std(all_flow_errors)];
     
-    pie_data = [top_loads; other_load];
-    pie_labels = [cellstr(num2str(top_buses)); {'Others'}];
-    pie(pie_data, pie_labels);
-    title('True Load Distribution');
+    bar(x_pos, avg_errors, 'FaceColor', [0.6 0.8 0.6]);
+    hold on;
+    errorbar(x_pos, avg_errors, std_errors, 'k', 'LineStyle', 'none', 'LineWidth', 2);
+    
+    set(gca, 'XTickLabel', {'Observed', 'All Flows'});
+    ylabel('Flow Error (MW)');
+    title('Flow Error Comparison');
+    grid on;
+    hold off;
 end
 
-% Subplot 6: Load distribution pie chart (Estimated)
+% Subplot 6: Flow error by magnitude
 subplot(2,4,6);
-if length(estimated_loads) <= 8
-    pie(estimated_loads, cellstr(num2str(load_buses)));
-    title('Estimated Load Distribution');
-else
-    [sorted_est, sort_idx] = sort(estimated_loads, 'descend');
-    top_est = sorted_est(1:min(6, length(sorted_est)));
-    top_buses_est = load_buses(sort_idx(1:length(top_est)));
-    other_est = sum(sorted_est(length(top_est)+1:end));
+if ~isempty(true_flows_all) && ~isempty(all_flow_errors)
+    scatter(abs(true_flows_all), all_flow_errors, 60, 'filled', 'MarkerFaceAlpha', 0.7);
+    xlabel('True Flow Magnitude (MW)');
+    ylabel('Flow Error (MW)');
+    title('Error vs Flow Magnitude');
+    grid on;
     
-    pie_data_est = [top_est; other_est];
-    pie_labels_est = [cellstr(num2str(top_buses_est)); {'Others'}];
-    pie(pie_data_est, pie_labels_est);
-    title('Estimated Load Distribution');
+    % Add trend line
+    if length(true_flows_all) > 5
+        p = polyfit(abs(true_flows_all), all_flow_errors, 1);
+        trend_y = polyval(p, sort(abs(true_flows_all)));
+        hold on;
+        plot(sort(abs(true_flows_all)), trend_y, 'r--', 'LineWidth', 2);
+        hold off;
+    end
 end
 
 % Subplot 7: Error histogram
@@ -295,20 +340,21 @@ axis off;
 good_estimates = sum(abs(load_errors_plot./true_loads_only) < 0.25);
 
 summary_stats = {
-    'LOAD ALLOCATION SUMMARY';
-    '======================';
-    sprintf('Load RMSE: %.1f MW', allocation_rmse);
-    sprintf('Load MAE: %.1f MW', allocation_mae);
-    sprintf('Load Correlation: R^2 = %.3f', load_corr^2);
+    'COMPREHENSIVE SUMMARY';
+    '====================';
+    'LOAD ALLOCATION:';
+    sprintf('  RMSE: %.1f MW', allocation_rmse);
+    sprintf('  Correlation: R^2 = %.3f', load_corr^2);
+    sprintf('  Success: %d/%d buses', good_estimates, length(true_loads_only));
     '';
-    sprintf('Flow RMSE: %.1f MW', flow_rmse);
-    sprintf('Total Load Recovery:');
-    sprintf('  True: %.0f MW', sum(true_loads_only));
-    sprintf('  Est:  %.0f MW', sum(estimated_loads));
-    sprintf('  Error: %.1f%%', total_error/sum(true_loads_only)*100);
+    'FLOW MATCHING:';
+    sprintf('  Observed RMSE: %.1f MW', observed_flow_rmse);
+    sprintf('  All flows RMSE: %.1f MW', all_flow_rmse);
+    sprintf('  Flow Correlation: R^2 = %.3f', flow_correlation^2);
     '';
-    sprintf('Success Rate:');
-    sprintf('  Good estimates: %d/%d', good_estimates, length(true_loads_only));
+    'CONSTRAINTS:';
+    sprintf('  Range: %.0f to %.0f MW', min(estimated_loads), max(estimated_loads));
+    sprintf('  Distributed Gen: %d buses', sum(estimated_loads < 0));
 };
 
 text(0.05, 0.95, summary_stats, 'FontSize', 10, 'FontName', 'Courier', ...
@@ -319,7 +365,8 @@ sgtitle('Load Allocation Inverse Problem: From Flow Measurements to Load Distrib
 
 %% STEP 9: Save Results
 save('load_allocation_demo_results.mat', 'true_loads_only', 'estimated_loads', ...
-     'load_buses', 'allocation_rmse', 'flow_rmse', 'load_corr');
+     'load_buses', 'allocation_rmse', 'observed_flow_rmse', 'all_flow_rmse', 'load_corr', ...
+     'flow_correlation', 'true_flows_all', 'calc_flows_all');
 
 print(gcf, 'load_allocation_inverse_problem.png', '-dpng', '-r300');
 
@@ -327,15 +374,17 @@ fprintf('\n=== DEMONSTRATION SUMMARY ===\n');
 fprintf('Inverse Problem: Load allocation from flow measurements\n');
 fprintf('Input: %d flow observations from key transmission lines\n', length(observed_flows));
 fprintf('Output: Load distribution across %d buses\n', length(load_buses));
-fprintf('Accuracy: Load RMSE = %.1f MW, Flow RMSE = %.1f MW\n', allocation_rmse, flow_rmse);
-fprintf('Correlation: R² = %.3f\n', load_corr^2);
+fprintf('Load Accuracy: RMSE = %.1f MW, Correlation R² = %.3f\n', allocation_rmse, load_corr^2);
+fprintf('Flow Matching: Observed RMSE = %.1f MW, All flows RMSE = %.1f MW\n', observed_flow_rmse, all_flow_rmse);
 fprintf('Total load recovery: %.1f%%\n', (1-total_error/sum(true_loads_only))*100);
+fprintf('Constraint compliance: %.0f ≤ Load ≤ %.0f MW (%.0f buses with distributed gen)\n', ...
+        min(estimated_loads), max(estimated_loads), sum(estimated_loads < 0));
 
 fprintf('\nFiles generated:\n');
 fprintf('- load_allocation_inverse_problem.png\n');
 fprintf('- load_allocation_demo_results.mat\n');
 
-%% Objective Function for Load Allocation
+%% Improved Objective Function for Load Allocation
 function obj = load_allocation_objective(loads, load_buses, mpc_base, target_flows, flow_from, flow_to)
     % Update case with current load allocation
     mpc_temp = mpc_base;
@@ -354,8 +403,10 @@ function obj = load_allocation_objective(loads, load_buses, mpc_base, target_flo
         return;
     end
     
-    % Calculate flow matching objective
+    % Calculate improved flow matching objective with normalization and weighting
     obj = 0;
+    total_weight = 0;
+    
     for i = 1:length(target_flows)
         from_bus = flow_from(i);
         to_bus = flow_to(i);
@@ -366,9 +417,37 @@ function obj = load_allocation_objective(loads, load_buses, mpc_base, target_flo
         
         if ~isempty(calc_idx)
             calculated = results.branch(calc_idx(1), 14);
-            obj = obj + (calculated - target)^2;
+            error = calculated - target;
+            
+            % Improved weighting scheme
+            if abs(target) > 50
+                weight = 2.0;  % Higher weight for major transmission lines
+            elseif abs(target) > 20
+                weight = 1.5;  % Medium weight for intermediate lines
+            else
+                weight = 1.0;  % Standard weight for smaller flows
+            end
+            
+            % Normalized squared error (prevents large flows from dominating)
+            normalization_factor = max(abs(target), 10);  % Prevent division by very small numbers
+            normalized_error = error / normalization_factor;
+            
+            obj = obj + weight * normalized_error^2;
+            total_weight = total_weight + weight;
+            
         else
-            obj = obj + target^2 * 1000;  % Large penalty if branch not found
+            % Large penalty if branch not found (normalized)
+            obj = obj + 100;
         end
     end
+    
+    % Normalize by total weight to maintain consistent scale
+    if total_weight > 0
+        obj = obj / total_weight;
+    end
+    
+    % Add regularization term to prefer smoother load distributions
+    load_variance = var(loads);
+    regularization_weight = 0.01;  % Small weight for regularization
+    obj = obj + regularization_weight * load_variance;
 end
